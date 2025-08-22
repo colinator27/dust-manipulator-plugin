@@ -521,10 +521,9 @@ static void filter_update(void* data, obs_data_t* settings)
 	}
 }
 
-static obs_properties_t *filter_properties(void *data)
+static obs_properties_t *filter_properties(void*)
 {
 	// Filter settings
-	//dust_manipulator_filter* s = (dust_manipulator_filter*)data;
 	obs_properties_t *props = obs_properties_create();
 	obs_properties_add_int(props, "max_screenshot_count", obs_module_text("Number of screenshots to take"), 1, 60, 1);
 	obs_properties_add_int(props, "screenshot_width", obs_module_text("Screenshot width"), 1, 1280, 1);
