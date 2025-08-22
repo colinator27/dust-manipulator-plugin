@@ -33,13 +33,13 @@
     },
     "platformConfig": {
         "macos": {
-            "bundleId": "com.example.plugintemplate-for-obs"
+            "bundleId": "com.colinator27.dust-manipulator-plugin"
         }
     },
-    "name": "plugintemplate-for-obs",
-    "displayName": "Plugin Template for OBS",
-    "version": "1.0.0",
-    "author": "Your Name Here",
-    "website": "https://example.com",
-    "email": "me@example.com"
+    "name": "dust-manipulator-plugin",
+    "displayName": "Dust Manipulator Plugin for OBS",
+    "version": "0.1.0",
+    "author": "colinator27",
+    "website": "https://colinator27.github.io",
+    "email": "colinator27official@gmail.com"
 }
