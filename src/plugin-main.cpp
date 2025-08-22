@@ -25,6 +25,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <unordered_set>
 #include <mutex>
 #include <vector>
+#include <thread>
 
 #define MESSAGE_CODE_HELLO 0x55541000
 #define MESSAGE_CODE_HELLO_ACK 0x55541001
@@ -136,6 +137,10 @@ private:
 		try
 		{
 			size_t acknowledgeLength = asio::read(socket, asio::buffer(&acknowledgeCode, sizeof(acknowledgeCode)));
+			if (acknowledgeLength != sizeof(acknowledgeCode))
+			{
+				throw std::runtime_error("unexpected acknowledgment length");
+			}
 		}
 		catch (std::exception& e)
 		{
@@ -228,7 +233,7 @@ private:
 						// Ensure entire buffer is filled
 						if (num_bytes != 8)
 						{
-							throw std::exception("unexpected number of bytes received");
+							throw std::runtime_error("unexpected number of bytes received");
 						}
 
 						// Check message code
@@ -236,7 +241,7 @@ private:
 						if (message_code != MESSAGE_CODE_SCREENSHOT_START_DELAY &&
 						    message_code != MESSAGE_CODE_SCREENSHOT_MODE)
 						{
-							throw std::exception("unexpected message code received");
+							throw std::runtime_error("unexpected message code received");
 						}
 
 						if (message_code == MESSAGE_CODE_SCREENSHOT_MODE)
@@ -381,7 +386,7 @@ public:
 		m_ScreenshotConfigMutex.lock();
 		uint32_t res = m_ScreenshotStartDelay;
 		m_ScreenshotConfigMutex.unlock();
-		return m_ScreenshotStartDelay;
+		return res;
 	}
 
 	bool get_is_single_screenshot_only()
@@ -389,7 +394,7 @@ public:
 		m_ScreenshotConfigMutex.lock();
 		bool res = m_IsSingleScreenshotOnly;
 		m_ScreenshotConfigMutex.unlock();
-		return m_IsSingleScreenshotOnly;
+		return res;
 	}
 
 	void connect_if_not_already(uint32_t port)
@@ -519,7 +524,7 @@ static void filter_update(void* data, obs_data_t* settings)
 static obs_properties_t *filter_properties(void *data)
 {
 	// Filter settings
-	dust_manipulator_filter* s = (dust_manipulator_filter*)data;
+	//dust_manipulator_filter* s = (dust_manipulator_filter*)data;
 	obs_properties_t *props = obs_properties_create();
 	obs_properties_add_int(props, "max_screenshot_count", obs_module_text("Number of screenshots to take"), 1, 60, 1);
 	obs_properties_add_int(props, "screenshot_width", obs_module_text("Screenshot width"), 1, 1280, 1);
@@ -541,7 +546,7 @@ static void filter_get_defaults(obs_data_t *settings)
 	obs_data_release(presets);
 }
 
-static void filter_load(void* data, obs_data_t* settings)
+static void filter_load(void*, obs_data_t* settings)
 {
 	// Load hotkeys along with filter information
 	obs_data_array_t *hotkey_data = obs_data_get_array(settings, "start_hotkey");
@@ -585,7 +590,7 @@ static void filter_load(void* data, obs_data_t* settings)
 	}
 }
 
-static void filter_save(void* data, obs_data_t* settings)
+static void filter_save(void*, obs_data_t* settings)
 {
 	// Save hotkeys along with filter information
 	if (s_HotkeysInitialized)
@@ -748,7 +753,7 @@ static void filter_tick(void *data, float second)
 	}
 }
 
-static void filter_render(void* data, gs_effect_t* effect)
+static void filter_render(void* data, gs_effect_t*)
 {
 	// Passthrough - skip the filter
 	dust_manipulator_filter* s = (dust_manipulator_filter*)data;
@@ -814,7 +819,7 @@ static void filter_handle_hotkey(dust_manipulator_filter* s, int hotkey_number)
 	}
 }
 
-static void handle_hotkey(void* data, obs_hotkey_id id, obs_hotkey_t* hotkey, bool pressed)
+static void handle_hotkey(void*, obs_hotkey_id id, obs_hotkey_t*, bool pressed)
 {
 	// Make sure hotkeys initialized and that it was pressed
 	if (!s_HotkeysInitialized)
