@@ -20,7 +20,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <plugin-support.h>
 #include <graphics/vec4.h>
 
-#include <vendor/asio.hpp>
+#include <asio.hpp>
 
 #include <unordered_set>
 #include <mutex>

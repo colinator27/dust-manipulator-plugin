@@ -13,6 +13,8 @@ include(helpers)
 
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE src/vendor/)
+
 find_package(libobs REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
 
