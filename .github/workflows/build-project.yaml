@@ -293,12 +293,21 @@ jobs:
       - name: Temporary test
         shell: cmd
         run: |
-          dir
           cd ${{ github.workspace }}/release/
+          7z x ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-windows-x64*.*
+          dir
+          cd ..
+          copy README.md "${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/README.md"
+          copy LICENSE "${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/LICENSE"
+          cd ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit
           dir
 
       - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-windows-x64-${{ needs.check-event.outputs.commitHash }}
-          path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-windows-x64*.*
+          path: |
+            ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/${{ steps.setup.outputs.pluginName }}.dll
+            ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/README.md
+            ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/LICENSE
+            
