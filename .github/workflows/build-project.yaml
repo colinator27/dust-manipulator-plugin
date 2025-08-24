@@ -224,6 +224,18 @@ jobs:
           config: ${{ needs.check-event.outputs.config }}
           package: ${{ fromJSON(needs.check-event.outputs.package) }}
 
+      - name: Reorganize Files (custom step)
+        shell: bash
+        run: |
+          ls -la
+          cd ${{ github.workspace }}/release/
+          ls -la
+          7z x ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-${{ matrix.os }}-x86_64*.*
+          cd ..
+          copy README.md "${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/README.md"
+          copy LICENSE "${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/LICENSE"
+          cd ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit
+
       - name: Upload Source Tarball 🗜️
         uses: actions/upload-artifact@v4
         with:
@@ -234,8 +246,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-${{ matrix.os }}-x86_64-${{ needs.check-event.outputs.commitHash }}
-          path: ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-x86_64*.*
-
+          path: |
+            ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-x86_64.*
+            ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/README.md
+            ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}/bin/64bit/LICENSE
+      
+      #      ${{ github.workspace }}/release/${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-x86_64*.*
+      
       - name: Upload debug symbol artifacts 🪲
         uses: actions/upload-artifact@v4
         if: ${{ fromJSON(needs.check-event.outputs.package) }}
