@@ -1,6 +1,6 @@
 /*
 dust-manipulator-plugin
-Copyright (C) 2025 colinator27
+Copyright (C) 2026 colinator27
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <asio.hpp>
 
-#include <unordered_set>
+#include <string>
 #include <mutex>
 #include <vector>
 #include <thread>
@@ -337,7 +337,7 @@ public:
 		m_Acknowledged = false;
 	}
 
-	void send_hotkey(int hotkey_number)
+	void send_hotkey(uint32_t hotkey_number)
 	{
 		if (!m_Started || !m_Acknowledged || m_ShutdownThread)
 		{
@@ -434,14 +434,15 @@ typedef struct dust_manipulator_filter
 	bool screenshot_is_single_only;
 
 	uint32_t output_port_number;
+
+	obs_hotkey_id hotkey1;
+	obs_hotkey_id hotkey2;
+	obs_hotkey_id hotkey3;
+	obs_hotkey_id hotkey4;
+	obs_hotkey_id hotkey5;
 } dust_manipulator_filter;
 
-obs_hotkey_id s_Hotkey1;
-obs_hotkey_id s_Hotkey2;
-obs_hotkey_id s_Hotkey3;
-obs_hotkey_id s_Hotkey4;
-bool s_HotkeysInitialized = false;
-std::unordered_set<dust_manipulator_filter*> s_ActiveFilters = {};
+uint64_t s_HotkeyNameId = 1;
 
 typedef struct vec4 vec4;
 
@@ -454,15 +455,47 @@ static const char* filter_get_name(void* unused)
 	return obs_module_text("Dust Manipulator");
 }
 
+static void handle_hotkey(void*, obs_hotkey_id, obs_hotkey_t*, bool);
+
 static void* filter_create(obs_data_t* settings, obs_source_t* source)
 {
 	dust_manipulator_filter* s = (dust_manipulator_filter*)bzalloc(sizeof(dust_manipulator_filter));
 	s->source = source;
 	s->connection = new Connection();
 
+	const char* uuid = obs_source_get_uuid(source);
+	if (!uuid)
+	{
+		obs_log(LOG_ERROR, "failed to get UUID for source");
+		uuid = "unknown_uuid";
+	}
+	const std::string namePrefix = std::string("dust_manipulator_filter.") + uuid + ".";
+	const std::string nameHotkey1 = namePrefix + "hotkey1";
+	const std::string nameHotkey2 = namePrefix + "hotkey2";
+	const std::string nameHotkey3 = namePrefix + "hotkey3";
+	const std::string nameHotkey4 = namePrefix + "hotkey4";
+	const std::string nameHotkey5 = namePrefix + "hotkey5";
+	const std::string textPrefix = std::string("Dust Manipulator Filter ") + std::to_string(s_HotkeyNameId) + ": ";
+	const std::string textHotkey1 = textPrefix + "Hotkey 1";
+	const std::string textHotkey2 = textPrefix + "Hotkey 2";
+	const std::string textHotkey3 = textPrefix + "Hotkey 3";
+	const std::string textHotkey4 = textPrefix + "Hotkey 4";
+	const std::string textHotkey5 = textPrefix + "Reset Hotkey";
+	s->hotkey1 = obs_hotkey_register_frontend(nameHotkey1.c_str(), textHotkey1.c_str(), handle_hotkey, s);
+	s->hotkey2 = obs_hotkey_register_frontend(nameHotkey2.c_str(), textHotkey2.c_str(), handle_hotkey, s);
+	s->hotkey3 = obs_hotkey_register_frontend(nameHotkey3.c_str(), textHotkey3.c_str(), handle_hotkey, s);
+	s->hotkey4 = obs_hotkey_register_frontend(nameHotkey4.c_str(), textHotkey4.c_str(), handle_hotkey, s);
+	s->hotkey5 = obs_hotkey_register_frontend(nameHotkey5.c_str(), textHotkey5.c_str(), handle_hotkey, s);
+	if (s->hotkey1 == OBS_INVALID_HOTKEY_ID || s->hotkey2 == OBS_INVALID_HOTKEY_ID ||
+	    s->hotkey3 == OBS_INVALID_HOTKEY_ID || s->hotkey4 == OBS_INVALID_HOTKEY_ID ||
+	    s->hotkey5 == OBS_INVALID_HOTKEY_ID)
+	{
+		obs_log(LOG_ERROR, "failed to register hotkeys for source with UUID %s", uuid);
+	}
+
 	obs_source_update(source, settings);
 
-	s_ActiveFilters.insert(s);
+	s_HotkeyNameId++;
 
 	return s;
 }
@@ -471,10 +504,34 @@ static void filter_destroy(void* data)
 {
 	dust_manipulator_filter* s = (dust_manipulator_filter*)data;
 
+	if (s->hotkey1 != OBS_INVALID_HOTKEY_ID)
+	{
+		obs_hotkey_unregister(s->hotkey1);
+		s->hotkey1 = OBS_INVALID_HOTKEY_ID;
+	}
+	if (s->hotkey2 != OBS_INVALID_HOTKEY_ID)
+	{
+		obs_hotkey_unregister(s->hotkey2);
+		s->hotkey2 = OBS_INVALID_HOTKEY_ID;
+	}
+	if (s->hotkey3 != OBS_INVALID_HOTKEY_ID)
+	{
+		obs_hotkey_unregister(s->hotkey3);
+		s->hotkey3 = OBS_INVALID_HOTKEY_ID;
+	}
+	if (s->hotkey4 != OBS_INVALID_HOTKEY_ID)
+	{
+		obs_hotkey_unregister(s->hotkey4);
+		s->hotkey4 = OBS_INVALID_HOTKEY_ID;
+	}
+	if (s->hotkey5 != OBS_INVALID_HOTKEY_ID)
+	{
+		obs_hotkey_unregister(s->hotkey5);
+		s->hotkey5 = OBS_INVALID_HOTKEY_ID;
+	}
+
 	delete s->connection;
 	s->connection = NULL;
-
-	s_ActiveFilters.erase(s);
 
 	obs_enter_graphics();
 	if (s->texrender)
@@ -526,8 +583,8 @@ static obs_properties_t *filter_properties(void*)
 	// Filter settings
 	obs_properties_t *props = obs_properties_create();
 	obs_properties_add_int(props, "max_screenshot_count", obs_module_text("Number of screenshots to take"), 1, 60, 1);
-	obs_properties_add_int(props, "screenshot_width", obs_module_text("Screenshot width"), 1, 1280, 1);
-	obs_properties_add_int(props, "screenshot_height", obs_module_text("Screenshot height"), 1, 720, 1);
+	obs_properties_add_int(props, "screenshot_width", obs_module_text("Screenshot width (keep at 640 normally)"), 1, 1280, 1);
+	obs_properties_add_int(props, "screenshot_height", obs_module_text("Screenshot height (keep at 480 normally)"), 1, 720, 1);
 	obs_properties_add_int(props, "output_port_number", obs_module_text("Local port number to send data to"), 1024, 65535, 1);
 	return props;
 }
@@ -539,21 +596,19 @@ static void filter_get_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, "screenshot_width", 640);
 	obs_data_set_default_int(settings, "screenshot_height", 480);
 	obs_data_set_default_int(settings, "output_port_number", 48654);
-
-	obs_data_t *presets = obs_data_create();
-	obs_data_set_default_obj(settings, "presets", presets);
-	obs_data_release(presets);
 }
 
-static void filter_load(void*, obs_data_t* settings)
+static void filter_load(void* data, obs_data_t* settings)
 {
+	dust_manipulator_filter* s = (dust_manipulator_filter*)data;
+
 	// Load hotkeys along with filter information
-	obs_data_array_t *hotkey_data = obs_data_get_array(settings, "start_hotkey");
+	obs_data_array_t* hotkey_data = obs_data_get_array(settings, "start_hotkey");
 	if (hotkey_data)
 	{
-		if (s_HotkeysInitialized)
+		if (s->hotkey1 != OBS_INVALID_HOTKEY_ID && obs_data_array_count(hotkey_data) > 0)
 		{
-			obs_hotkey_load(s_Hotkey1, hotkey_data);
+			obs_hotkey_load(s->hotkey1, hotkey_data);
 		}
 		obs_data_array_release(hotkey_data);
 	}
@@ -561,9 +616,9 @@ static void filter_load(void*, obs_data_t* settings)
 	hotkey_data = obs_data_get_array(settings, "hotkey_2");
 	if (hotkey_data)
 	{
-		if (s_HotkeysInitialized)
+		if (s->hotkey2 != OBS_INVALID_HOTKEY_ID && obs_data_array_count(hotkey_data) > 0)
 		{
-			obs_hotkey_load(s_Hotkey2, hotkey_data);
+			obs_hotkey_load(s->hotkey2, hotkey_data);
 		}
 		obs_data_array_release(hotkey_data);
 	}
@@ -571,9 +626,9 @@ static void filter_load(void*, obs_data_t* settings)
 	hotkey_data = obs_data_get_array(settings, "hotkey_3");
 	if (hotkey_data)
 	{
-		if (s_HotkeysInitialized)
+		if (s->hotkey3 != OBS_INVALID_HOTKEY_ID && obs_data_array_count(hotkey_data) > 0)
 		{
-			obs_hotkey_load(s_Hotkey3, hotkey_data);
+			obs_hotkey_load(s->hotkey3, hotkey_data);
 		}
 		obs_data_array_release(hotkey_data);
 	}
@@ -581,44 +636,75 @@ static void filter_load(void*, obs_data_t* settings)
 	hotkey_data = obs_data_get_array(settings, "hotkey_4");
 	if (hotkey_data)
 	{
-		if (s_HotkeysInitialized)
+		if (s->hotkey4 != OBS_INVALID_HOTKEY_ID && obs_data_array_count(hotkey_data) > 0)
 		{
-			obs_hotkey_load(s_Hotkey4, hotkey_data);
+			obs_hotkey_load(s->hotkey4, hotkey_data);
+		}
+		obs_data_array_release(hotkey_data);
+	}
+
+	hotkey_data = obs_data_get_array(settings, "hotkey_5");
+	if (hotkey_data)
+	{
+		if (s->hotkey5 != OBS_INVALID_HOTKEY_ID && obs_data_array_count(hotkey_data) > 0)
+		{
+			obs_hotkey_load(s->hotkey5, hotkey_data);
 		}
 		obs_data_array_release(hotkey_data);
 	}
 }
 
-static void filter_save(void*, obs_data_t* settings)
+static void filter_save(void* data, obs_data_t* settings)
 {
+	dust_manipulator_filter* s = (dust_manipulator_filter*)data;
+
 	// Save hotkeys along with filter information
-	if (s_HotkeysInitialized)
+	if (s->hotkey1 != OBS_INVALID_HOTKEY_ID)
 	{
-		obs_data_array_t *hotkey_data = obs_hotkey_save(s_Hotkey1);
+		obs_data_array_t *hotkey_data = obs_hotkey_save(s->hotkey1);
 		if (hotkey_data)
 		{
-			obs_data_set_array(settings, "start_hotkey", hotkey_data);
+			obs_data_set_array(settings, "start_hotkey" /* legacy reasons */, hotkey_data);
 			obs_data_array_release(hotkey_data);
 		}
-		
-		hotkey_data = obs_hotkey_save(s_Hotkey2);
+	}
+
+	if (s->hotkey2 != OBS_INVALID_HOTKEY_ID)
+	{
+		obs_data_array_t *hotkey_data = obs_hotkey_save(s->hotkey2);
 		if (hotkey_data)
 		{
 			obs_data_set_array(settings, "hotkey_2", hotkey_data);
 			obs_data_array_release(hotkey_data);
 		}
+	}
 
-		hotkey_data = obs_hotkey_save(s_Hotkey3);
-		if (hotkey_data) 
+	if (s->hotkey3 != OBS_INVALID_HOTKEY_ID)
+	{
+		obs_data_array_t *hotkey_data = obs_hotkey_save(s->hotkey3);
+		if (hotkey_data)
 		{
 			obs_data_set_array(settings, "hotkey_3", hotkey_data);
 			obs_data_array_release(hotkey_data);
 		}
-		
-		hotkey_data = obs_hotkey_save(s_Hotkey4);
+	}
+
+	if (s->hotkey4 != OBS_INVALID_HOTKEY_ID)
+	{
+		obs_data_array_t *hotkey_data = obs_hotkey_save(s->hotkey4);
 		if (hotkey_data)
 		{
 			obs_data_set_array(settings, "hotkey_4", hotkey_data);
+			obs_data_array_release(hotkey_data);
+		}
+	}
+
+	if (s->hotkey5 != OBS_INVALID_HOTKEY_ID)
+	{
+		obs_data_array_t *hotkey_data = obs_hotkey_save(s->hotkey5);
+		if (hotkey_data)
+		{
+			obs_data_set_array(settings, "hotkey_5", hotkey_data);
 			obs_data_array_release(hotkey_data);
 		}
 	}
@@ -773,7 +859,7 @@ static uint32_t filter_height(void *data)
 	return s->source_height;
 }
 
-static void filter_handle_hotkey(dust_manipulator_filter* s, int hotkey_number)
+static void filter_handle_hotkey(dust_manipulator_filter* s, uint32_t hotkey_number)
 {
 	// Make sure we're currently active
 	if (!s->is_active)
@@ -818,46 +904,49 @@ static void filter_handle_hotkey(dust_manipulator_filter* s, int hotkey_number)
 	}
 }
 
-static void handle_hotkey(void*, obs_hotkey_id id, obs_hotkey_t*, bool pressed)
+static void handle_hotkey(void* data, obs_hotkey_id id, obs_hotkey_t*, bool pressed)
 {
+	dust_manipulator_filter* s = (dust_manipulator_filter*)data;
+
 	// Make sure hotkeys initialized and that it was pressed
-	if (!s_HotkeysInitialized)
+	if (!pressed)
 	{
 		return;
 	}
-	if (!pressed)
+	if (id == OBS_INVALID_HOTKEY_ID)
 	{
 		return;
 	}
 
 	// Figure out which hotkey was pressed
-	int hotkey_number;
-	if (id == s_Hotkey1)
+	uint32_t hotkey_number;
+	if (id == s->hotkey1)
 	{
 		hotkey_number = 0;
 	}
-	else if (id == s_Hotkey2)
+	else if (id == s->hotkey2)
 	{
 		hotkey_number = 1;
 	}
-	else if (id == s_Hotkey3)
+	else if (id == s->hotkey3)
 	{
 		hotkey_number = 2;
 	}
-	else if (id == s_Hotkey4)
+	else if (id == s->hotkey4)
 	{
 		hotkey_number = 3;
+	}
+	else if (id == s->hotkey5)
+	{
+		hotkey_number = 4;
 	}
 	else
 	{
 		return;
 	}
 
-	// Handle hotkey on all filters
-	for (dust_manipulator_filter* s : s_ActiveFilters)
-	{
-		filter_handle_hotkey(s, hotkey_number);
-	}
+	// Handle hotkey on individual filter
+	filter_handle_hotkey(s, hotkey_number);
 }
 
 bool obs_module_load(void)
@@ -883,28 +972,11 @@ bool obs_module_load(void)
 	info.save = filter_save;
 	obs_register_source(&info);
 
-	// Register hotkey
-	s_Hotkey1 = obs_hotkey_register_frontend("dust_manipulator_filter.start", obs_module_text("Hotkey 1 (Take Screenshots)"), handle_hotkey, NULL);
-	s_Hotkey2 = obs_hotkey_register_frontend("dust_manipulator_filter.hotkey2", obs_module_text("Hotkey 2"), handle_hotkey, NULL);
-	s_Hotkey3 = obs_hotkey_register_frontend("dust_manipulator_filter.hotkey3", obs_module_text("Hotkey 3"), handle_hotkey, NULL);
-	s_Hotkey4 = obs_hotkey_register_frontend("dust_manipulator_filter.hotkey4", obs_module_text("Hotkey 4"), handle_hotkey, NULL);
-	s_HotkeysInitialized = true;
-
 	obs_log(LOG_INFO, "plugin loaded successfully (version %s)", PLUGIN_VERSION);
 	return true;
 }
 
 void obs_module_unload(void)
 {
-	// Unload hotkeys
-	if (s_HotkeysInitialized) 
-	{
-		obs_hotkey_unregister(s_Hotkey1);
-		obs_hotkey_unregister(s_Hotkey2);
-		obs_hotkey_unregister(s_Hotkey3);
-		obs_hotkey_unregister(s_Hotkey4);
-		s_HotkeysInitialized = false;
-	}
-
 	obs_log(LOG_INFO, "plugin unloaded");
 }
